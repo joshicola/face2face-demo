@@ -47,7 +47,8 @@ def main():
     sess = tf.Session(graph=graph)
 
     # OpenCV
-    cap = cv2.VideoCapture(args.video_source)
+    # cap = cv2.VideoCapture(args.video_source)
+    cap = cv2.VideoCapture(args.video_dir)
     fps = video.FPS().start()
 
     while True:
@@ -114,12 +115,13 @@ def main():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-src', '--source', dest='video_source', type=int,
-                        default=0, help='Device index of the camera.')
+    # parser.add_argument('-src', '--source', dest='video_source', type=int,
+    #                     default=0, help='Device index of the camera.')
     parser.add_argument('--show', dest='display_landmark', type=int, default=0, choices=[0, 1],
                         help='0 shows the normal input and 1 the facial landmark.')
     parser.add_argument('--landmark-model', dest='face_landmark_shape_file', type=str, help='Face landmark model file.')
     parser.add_argument('--tf-model', dest='frozen_model_file', type=str, help='Frozen TensorFlow model file.')
+    parser.add_argument('--video-dir', dest='video_dir', type=str, help='video file path')
 
     args = parser.parse_args()
 
