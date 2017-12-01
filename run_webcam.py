@@ -5,8 +5,16 @@ import numpy as np
 import tensorflow as tf
 from imutils import video
 
+import models
+import NonLinearLeastSquares
+from drawing import drawProjectedShape
+import utils
+from generate_train_data import getFaceKeypoints as getFaceKeypoints
+
+
 CROP_SIZE = 256
 DOWNSAMPLE_RATIO = 4
+lockedTranslation = False
 
 
 def reshape_for_polyline(array):
@@ -40,6 +48,24 @@ def load_graph(frozen_graph_filename):
 
 
 def main():
+    # fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+    writer = None
+
+    if writer is None:
+        print("Starting video writer")
+        writer = cv2.VideoWriter("./out.mp4", fourcc, 30.0, (512, 256))
+
+        if writer.isOpened():
+            print("Writer succesfully opened")
+        else:
+            writer = None
+            print("Writer opening failed")
+    else:
+        print("Stopping video writer")
+        writer.release()
+        writer = None
+
     # TensorFlow
     graph = load_graph(args.frozen_model_file)
     image_tensor = graph.get_tensor_by_name('image_tensor:0')
@@ -51,41 +77,63 @@ def main():
     cap = cv2.VideoCapture(args.video_dir)
     fps = video.FPS().start()
 
+    mean3DShape, blendshapes, mesh, idxs3D, idxs2D = utils.load3DFaceModel("candide.npz")
+    projectionModel = models.OrthographicProjectionBlendshapes(blendshapes.shape[0])
+
     while True:
         ret, frame = cap.read()
+        if frame is None:
+            break
 
         # resize image and detect face
         frame_resize = cv2.resize(frame, None, fx=1 / DOWNSAMPLE_RATIO, fy=1 / DOWNSAMPLE_RATIO)
         gray = cv2.cvtColor(frame_resize, cv2.COLOR_BGR2GRAY)
-        faces = detector(gray, 1)
+
+        #get frame face label
+        # faces = detector(gray, 2)
         black_image = np.zeros(frame.shape, np.uint8)
 
-        for face in faces:
-            detected_landmarks = predictor(gray, face).parts()
-            landmarks = [[p.x * DOWNSAMPLE_RATIO, p.y * DOWNSAMPLE_RATIO] for p in detected_landmarks]
+        # for face in faces:
+        #     detected_landmarks = predictor(gray, face).parts()
+        #     landmarks = [[p.x * DOWNSAMPLE_RATIO, p.y * DOWNSAMPLE_RATIO] for p in detected_landmarks]
+        #
+        #     jaw = reshape_for_polyline(landmarks[0:17])
+        #     left_eyebrow = reshape_for_polyline(landmarks[22:27])
+        #     right_eyebrow = reshape_for_polyline(landmarks[17:22])
+        #     nose_bridge = reshape_for_polyline(landmarks[27:31])
+        #     lower_nose = reshape_for_polyline(landmarks[30:35])
+        #     left_eye = reshape_for_polyline(landmarks[42:48])
+        #     right_eye = reshape_for_polyline(landmarks[36:42])
+        #     outer_lip = reshape_for_polyline(landmarks[48:60])
+        #     inner_lip = reshape_for_polyline(landmarks[60:68])
+        #
+        #     color = (255, 255, 255)
+        #     thickness = 3
+        #
+        #     cv2.polylines(black_image, [jaw], False, color, thickness)
+        #     cv2.polylines(black_image, [left_eyebrow], False, color, thickness)
+        #     cv2.polylines(black_image, [right_eyebrow], False, color, thickness)
+        #     cv2.polylines(black_image, [nose_bridge], False, color, thickness)
+        #     cv2.polylines(black_image, [lower_nose], True, color, thickness)
+        #     cv2.polylines(black_image, [left_eye], True, color, thickness)
+        #     cv2.polylines(black_image, [right_eye], True, color, thickness)
+        #     cv2.polylines(black_image, [outer_lip], True, color, thickness)
+        #     cv2.polylines(black_image, [inner_lip], True, color, thickness)
 
-            jaw = reshape_for_polyline(landmarks[0:17])
-            left_eyebrow = reshape_for_polyline(landmarks[22:27])
-            right_eyebrow = reshape_for_polyline(landmarks[17:22])
-            nose_bridge = reshape_for_polyline(landmarks[27:31])
-            lower_nose = reshape_for_polyline(landmarks[30:35])
-            left_eye = reshape_for_polyline(landmarks[42:48])
-            right_eye = reshape_for_polyline(landmarks[36:42])
-            outer_lip = reshape_for_polyline(landmarks[48:60])
-            inner_lip = reshape_for_polyline(landmarks[60:68])
+        shapes2D = getFaceKeypoints(frame, detector, predictor)
+        if shapes2D is None:
+            continue
+        # 3D model parameter initialization
+        modelParams = projectionModel.getInitialParameters(mean3DShape[:, idxs3D], shapes2D[0][:, idxs2D])
 
-            color = (255, 255, 255)
-            thickness = 3
+        # 3D model parameter optimization
+        modelParams = NonLinearLeastSquares.GaussNewton(modelParams, projectionModel.residual,
+                                                        projectionModel.jacobian, (
+                                                            [mean3DShape[:, idxs3D], blendshapes[:, :, idxs3D]],
+                                                            shapes2D[0][:, idxs2D]), verbose=0)
 
-            cv2.polylines(black_image, [jaw], False, color, thickness)
-            cv2.polylines(black_image, [left_eyebrow], False, color, thickness)
-            cv2.polylines(black_image, [right_eyebrow], False, color, thickness)
-            cv2.polylines(black_image, [nose_bridge], False, color, thickness)
-            cv2.polylines(black_image, [lower_nose], True, color, thickness)
-            cv2.polylines(black_image, [left_eye], True, color, thickness)
-            cv2.polylines(black_image, [right_eye], True, color, thickness)
-            cv2.polylines(black_image, [outer_lip], True, color, thickness)
-            cv2.polylines(black_image, [inner_lip], True, color, thickness)
+        drawProjectedShape(black_image, [mean3DShape, blendshapes], projectionModel, mesh, modelParams,
+                           lockedTranslation)
 
         # generate prediction
         combined_image = np.concatenate([resize(black_image), resize(frame_resize)], axis=1)
@@ -100,10 +148,14 @@ def main():
         else:
             cv2.imshow('frame', image_landmark)
 
+        if writer is not None:
+            writer.write(image_normal)
+
         fps.update()
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
+    writer.release()
     fps.stop()
     print('[INFO] elapsed time (total): {:.2f}'.format(fps.elapsed()))
     print('[INFO] approx. FPS: {:.2f}'.format(fps.fps()))
