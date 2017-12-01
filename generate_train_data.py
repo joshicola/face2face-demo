@@ -6,16 +6,57 @@ import argparse
 import numpy as np
 from imutils import video
 
+import models
+import NonLinearLeastSquares
+from drawing import drawProjectedShape
+import utils
+
 DOWNSAMPLE_RATIO = 4
 
+predictor_path = "shape_predictor_68_face_landmarks.dat"
+detector = dlib.get_frontal_face_detector()
+predictor = dlib.shape_predictor(predictor_path)
+lockedTranslation = False
 
 def reshape_for_polyline(array):
     return np.array(array, np.int32).reshape((-1, 1, 2))
 
 
+def getFaceKeypoints(img, detector, predictor, maxImgSizeForDetection=640):
+    imgScale = 1
+    scaledImg = img
+    if max(img.shape) > maxImgSizeForDetection:
+        imgScale = maxImgSizeForDetection / float(max(img.shape))
+        scaledImg = cv2.resize(img, (int(img.shape[1] * imgScale), int(img.shape[0] * imgScale)))
+
+    # detekcja twarzy
+    dets = detector(scaledImg, 1)
+
+    if len(dets) == 0:
+        return None
+
+    shapes2D = []
+    for det in dets:
+        faceRectangle = dlib.rectangle(int(det.left() / imgScale), int(det.top() / imgScale), int(det.right() / imgScale),
+                                  int(det.bottom() / imgScale))
+
+        # detekcja punktow charakterystycznych twarzy
+        dlibShape = predictor(img, faceRectangle)
+
+        shape2D = np.array([[p.x, p.y] for p in dlibShape.parts()])
+        # transpozycja, zeby ksztalt byl 2 x n a nie n x 2, pozniej ulatwia to obliczenia
+        shape2D = shape2D.T
+
+        shapes2D.append(shape2D)
+
+    return shapes2D
+
+
 def main():
     os.makedirs('original', exist_ok=True)
     os.makedirs('landmarks', exist_ok=True)
+    mean3DShape, blendshapes, mesh, idxs3D, idxs2D = utils.load3DFaceModel("candide.npz")
+    projectionModel = models.OrthographicProjectionBlendshapes(blendshapes.shape[0])
 
     cap = cv2.VideoCapture(args.filename)
     fps = video.FPS().start()
@@ -23,6 +64,8 @@ def main():
     count = 0
     while cap.isOpened():
         ret, frame = cap.read()
+        if frame is None:
+            break
 
         frame_resize = cv2.resize(frame, None, fx=1 / DOWNSAMPLE_RATIO, fy=1 / DOWNSAMPLE_RATIO)
         gray = cv2.cvtColor(frame_resize, cv2.COLOR_BGR2GRAY)
@@ -31,34 +74,22 @@ def main():
 
         t = time.time()
 
-        # Perform if there is a face detected
-        if len(faces) == 1:
-            for face in faces:
-                detected_landmarks = predictor(gray, face).parts()
-                landmarks = [[p.x * DOWNSAMPLE_RATIO, p.y * DOWNSAMPLE_RATIO] for p in detected_landmarks]
+        # Perform if there is a face detecte
+        shapes2D = getFaceKeypoints(frame, detector, predictor)
+        if shapes2D is None:
+            continue
+        if len(shapes2D) == 1:
+            # 3D model parameter initialization
+            modelParams = projectionModel.getInitialParameters(mean3DShape[:, idxs3D], shapes2D[0][:, idxs2D])
 
-                jaw = reshape_for_polyline(landmarks[0:17])
-                left_eyebrow = reshape_for_polyline(landmarks[22:27])
-                right_eyebrow = reshape_for_polyline(landmarks[17:22])
-                nose_bridge = reshape_for_polyline(landmarks[27:31])
-                lower_nose = reshape_for_polyline(landmarks[30:35])
-                left_eye = reshape_for_polyline(landmarks[42:48])
-                right_eye = reshape_for_polyline(landmarks[36:42])
-                outer_lip = reshape_for_polyline(landmarks[48:60])
-                inner_lip = reshape_for_polyline(landmarks[60:68])
+            # 3D model parameter optimization
+            modelParams = NonLinearLeastSquares.GaussNewton(modelParams, projectionModel.residual,
+                                                            projectionModel.jacobian, (
+                                                                [mean3DShape[:, idxs3D], blendshapes[:, :, idxs3D]],
+                                                                shapes2D[0][:, idxs2D]), verbose=0)
 
-                color = (255, 255, 255)
-                thickness = 3
-
-                cv2.polylines(black_image, [jaw], False, color, thickness)
-                cv2.polylines(black_image, [left_eyebrow], False, color, thickness)
-                cv2.polylines(black_image, [right_eyebrow], False, color, thickness)
-                cv2.polylines(black_image, [nose_bridge], False, color, thickness)
-                cv2.polylines(black_image, [lower_nose], True, color, thickness)
-                cv2.polylines(black_image, [left_eye], True, color, thickness)
-                cv2.polylines(black_image, [right_eye], True, color, thickness)
-                cv2.polylines(black_image, [outer_lip], True, color, thickness)
-                cv2.polylines(black_image, [inner_lip], True, color, thickness)
+            drawProjectedShape(black_image, [mean3DShape, blendshapes], projectionModel, mesh, modelParams,
+                               lockedTranslation)
 
             # Display the resulting frame
             count += 1
