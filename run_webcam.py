@@ -90,35 +90,7 @@ def main():
         gray = cv2.cvtColor(frame_resize, cv2.COLOR_BGR2GRAY)
 
         #get frame face label
-        # faces = detector(gray, 2)
         black_image = np.zeros(frame.shape, np.uint8)
-
-        # for face in faces:
-        #     detected_landmarks = predictor(gray, face).parts()
-        #     landmarks = [[p.x * DOWNSAMPLE_RATIO, p.y * DOWNSAMPLE_RATIO] for p in detected_landmarks]
-        #
-        #     jaw = reshape_for_polyline(landmarks[0:17])
-        #     left_eyebrow = reshape_for_polyline(landmarks[22:27])
-        #     right_eyebrow = reshape_for_polyline(landmarks[17:22])
-        #     nose_bridge = reshape_for_polyline(landmarks[27:31])
-        #     lower_nose = reshape_for_polyline(landmarks[30:35])
-        #     left_eye = reshape_for_polyline(landmarks[42:48])
-        #     right_eye = reshape_for_polyline(landmarks[36:42])
-        #     outer_lip = reshape_for_polyline(landmarks[48:60])
-        #     inner_lip = reshape_for_polyline(landmarks[60:68])
-        #
-        #     color = (255, 255, 255)
-        #     thickness = 3
-        #
-        #     cv2.polylines(black_image, [jaw], False, color, thickness)
-        #     cv2.polylines(black_image, [left_eyebrow], False, color, thickness)
-        #     cv2.polylines(black_image, [right_eyebrow], False, color, thickness)
-        #     cv2.polylines(black_image, [nose_bridge], False, color, thickness)
-        #     cv2.polylines(black_image, [lower_nose], True, color, thickness)
-        #     cv2.polylines(black_image, [left_eye], True, color, thickness)
-        #     cv2.polylines(black_image, [right_eye], True, color, thickness)
-        #     cv2.polylines(black_image, [outer_lip], True, color, thickness)
-        #     cv2.polylines(black_image, [inner_lip], True, color, thickness)
 
         shapes2D = getFaceKeypoints(frame, detector, predictor)
         if shapes2D is None:
