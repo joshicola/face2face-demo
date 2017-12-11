@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 
+
 def drawPoints(img, points, color=(0, 255, 0)):
     for point in points:
         cv2.circle(img, (int(point[0]), int(point[1])), 1, color)
@@ -37,6 +38,6 @@ def drawProjectedShape(img, x, projection, mesh, params, lockedTranslation=False
 
     projectedShape = projection.fun(x, localParams)
 
-    drawPoints(img, projectedShape.T, (255, 255, 255))
+    # drawPoints(img, projectedShape.T, (255, 255, 255))
     drawMesh(img, projectedShape.T, mesh)
     # drawCross(img, params)

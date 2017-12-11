@@ -24,7 +24,7 @@ parser.add_argument("--operation", required=True, choices=["grayscale", "resize"
 parser.add_argument("--workers", type=int, default=1, help="number of workers")
 # resize
 parser.add_argument("--pad", action="store_true", help="pad instead of crop for resize operation")
-parser.add_argument("--size", type=int, default=256, help="size to use for resize operation")
+parser.add_argument("--size", type=int, default=512, help="size to use for resize operation")
 # combine
 parser.add_argument("--b_dir", type=str, help="path to folder containing B images for combine operation")
 a = parser.parse_args()
@@ -39,13 +39,13 @@ def resize(src):
             # pad to correct ratio
             oh = (size - height) // 2
             ow = (size - width) // 2
-            dst = im.pad(image=dst, offset_height=oh, offset_width=ow, target_height=size, target_width=size)
+            dst = im.pad(image=dst, offset_height=oh-100, offset_width=ow, target_height=size, target_width=size)
         else:
             # crop to correct ratio
             size = min(height, width)
             oh = (height - size) // 2
             ow = (width - size) // 2
-            dst = im.crop(image=dst, offset_height=oh, offset_width=ow, target_height=size, target_width=size)
+            dst = im.crop(image=dst, offset_height=oh-100, offset_width=ow, target_height=size, target_width=size)
 
     assert(dst.shape[0] == dst.shape[1])
 

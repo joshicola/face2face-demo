@@ -1,7 +1,7 @@
 import argparse
 import tensorflow as tf
 
-CROP_SIZE = 256  # scale_size = CROP_SIZE
+CROP_SIZE = 512  # scale_size = CROP_SIZE
 ngf = 64
 ndf = 64
 
@@ -205,7 +205,7 @@ if __name__ == '__main__':
     parser.add_argument('--model-output', dest='output_folder', type=str, help='Model (reduced) folder to export.')
     args = parser.parse_args()
 
-    x = tf.placeholder(tf.uint8, shape=(256, 512, 3), name='image_tensor')  # input tensor
+    x = tf.placeholder(tf.uint8, shape=(CROP_SIZE, CROP_SIZE*2, 3), name='image_tensor')  # input tensor
     y = generate_output(x)
 
     with tf.Session() as sess:
